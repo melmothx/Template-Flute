@@ -314,6 +314,7 @@ sub _parse_template {
 	}
 
 	$xml = $twig->safe_parse_html($html_content);
+        _fix_script_tags($xml);
 	
 	unless ($xml) {
 		die "Invalid HTML template: $template: $@\n";
@@ -708,6 +709,7 @@ sub hook_html {
 	unless ($html = $parser->safe_parse_html($value)) {
 		die "Failed to parse HTML snippet: $@.\n";
 	}
+        _fix_script_tags($html);
 
 	$elt->cut_children();
 	
@@ -721,6 +723,18 @@ sub hook_html {
 	}
 	
 	return;
+}
+
+sub _fix_script_tags {
+    my $parsed = shift;
+    # script tags should not be escaped. Please note that this should
+    # be safe. It affects only the *content* of the <script> tags. If
+    # your values contains injected JS, having the & escaped as &amp;
+    # or > as &gt; will not save you.
+    my @elts = $parsed->get_xpath('//script');
+    foreach my $el (@elts) {
+        $el->set_asis;
+    }
 }
 
 =head1 AUTHOR
