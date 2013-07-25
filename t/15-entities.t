@@ -7,12 +7,7 @@ binmode STDOUT, ":encoding(utf-8)";
 
 use XML::Twig;
 
-if ($XML::Twig::VERSION > 3.39) {
-    plan skip_all => "WARNING! Your XML::Twig version probably contains a bug when parsing entities!. Skipping test";
-}
-else {
-    plan tests => 3;
-}
+plan tests => 3;
 
 my $layout_html = << 'HTML';
 <html>

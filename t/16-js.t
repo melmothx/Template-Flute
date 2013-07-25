@@ -10,12 +10,7 @@ use Template::Flute;
 use XML::Twig;
 use Data::Dumper;
 
-if ($XML::Twig::VERSION > 3.39) {
-    plan skip_all => "WARNING! Your XML::Twig version probably contains a bug when parsing entities!. Skipping test";
-}
-else {
-    plan tests => 7;
-}
+plan tests => 7;
 
 my $template_html =<< 'HTML';
 <!doctype html>
@@ -91,5 +86,5 @@ foreach my $el (@elts) {
     ok((index($el->text, "//]]>") >= 0), "cdata ok");
 }
 
-ok((index($xml->sprint, ']]&gt;') >= 0), "but ]]> get escaped for unknown reasons");
+ok($xml->sprint =~ m/\]\]>/);
 diag $xml->sprint;
