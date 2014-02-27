@@ -950,6 +950,14 @@ sub specification {
 	return $self->{specification};
 }
 
+sub DESTROY {
+    my $self = shift;
+    # manually delete the xml to break the circula references
+    delete $self->{specification}->{xml};
+    delete $self->{template}->{xml};
+}
+
+
 =head1 SPECIFICATION
 
 The specification ties the elements in the HTML template to the data
