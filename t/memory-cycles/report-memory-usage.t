@@ -6,7 +6,7 @@ use Test::More;
 use XML::Twig;
 use Template::Flute;
 use Memory::Usage;
-
+use Test::Memory::Cycle;
 
 my $mu = Memory::Usage->new;
 
@@ -18,15 +18,23 @@ for my $iter (1..10) {
 }
 
 
-for my $iter (1..30) {
+for my $iter (1..10) {
     $mu->record("Template Iteration $iter");
+    process_minimal();
+}
+
+for my $iter (1..10) {
+    $mu->record("Template Iteration with lists $iter");
     process_template();
 }
+
+
+
 $mu->record('end');
 
 diag $mu->report();
 
-plan skip_all => "Nothing to do";
+
 
 sub parse_twig {
     my $html = q{<div class="test">TEST</div>};
@@ -34,19 +42,64 @@ sub parse_twig {
     my $parsed = $parser->safe_parse_html($html);
 }
 
-sub process_template {
+
+sub process_minimal {
     my $spec = q{<specification>
 <value name="test"/>
 </specification>
 };
 
     my $html = q{<div class="test">TEST</div>};
-
     my $flute = Template::Flute->new(template => $html,
                                      specification => $spec,
                                      values => {test => rand(100)},
                                     );
     my $output = $flute->process;
+    return $flute;
+}
+
+sub process_template {
+
+    my $spec = q{<specification>
+<list name="attributes" iterator="attributes">
+<param name="value" field="title"/>
+<list name="values" class="values" iterator="attribute_values">
+<param name="value" class="attribute_value"/>
+<param name="title" class="attribute_title"/>
+</list>
+</list>
+</specification>
+};
+
+    my $html = q{<html>
+<ul><li class="attributes"><span class="value">Name</span>
+<ul><li class="values"><span class="attribute_title">Title</span></li>
+</li></ul>
+</html>
+};
+
+    my $attributes = [{name => 'color', title => 'Color',
+                       attribute_values =>
+                       [{value => 'red', title => 'Red'},
+                        {
+                         value => 'white', title => 'White'},
+                        {
+                         value => 'yellow', title => 'Yellow'},
+                       ]},
+                      {name => 'size', title => 'Size',
+                       attribute_values =>
+                       [{value => 'small', title => 'S'},
+                        {
+                         value => 'large', title => 'L'},
+                       ]},
+                     ];
+
+    my $flute = Template::Flute->new(template => $html,
+                                     specification => $spec,
+                                     values => {attributes => $attributes},
+                                    );
+
+    my $out = $flute->process;
     return $flute;
 }
 
