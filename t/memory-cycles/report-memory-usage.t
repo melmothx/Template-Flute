@@ -44,9 +44,10 @@ sub process_template {
 
     my $flute = Template::Flute->new(template => $html,
                                      specification => $spec,
-                                     values => {test => 0},
+                                     values => {test => rand(100)},
                                     );
     my $output = $flute->process;
+    return $flute;
 }
 
 

@@ -3,7 +3,7 @@ package Template::Flute;
 use strict;
 use warnings;
 
-use Scalar::Util qw/blessed/;
+use Scalar::Util qw/blessed weaken/;
 
 use Template::Flute::Utils;
 use Template::Flute::Specification::XML;
@@ -953,8 +953,8 @@ sub specification {
 sub DESTROY {
     my $self = shift;
     # manually delete the xml to break the circula references
-    delete $self->{specification}->{xml};
-    delete $self->{template}->{xml};
+    weaken($self->{specification}->{xml});
+    weaken($self->{template}->{xml});
 }
 
 
