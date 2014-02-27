@@ -7,6 +7,8 @@ use XML::Twig;
 use Template::Flute;
 use Memory::Usage;
 use Test::Memory::Cycle;
+use Data::Dumper;
+use Scalar::Util qw/weaken/;
 
 my $mu = Memory::Usage->new;
 
@@ -28,13 +30,21 @@ for my $iter (1..10) {
     process_template();
 }
 
+my $test = process_template();
+
+$Data::Dumper::Maxdepth = 2;
+# on destroy we do the same
+weaken($test->{specification}->{xml});
+weaken($test->{template}->{xml});
+memory_cycle_ok($test);
+
 
 
 $mu->record('end');
 
 diag $mu->report();
 
-
+done_testing;
 
 sub parse_twig {
     my $html = q{<div class="test">TEST</div>};
