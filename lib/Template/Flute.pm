@@ -18,11 +18,11 @@ Template::Flute - Modern designer-friendly HTML templating Engine
 
 =head1 VERSION
 
-Version 0.0091
+Version 0.0101
 
 =cut
 
-our $VERSION = '0.0091';
+our $VERSION = '0.0101';
 
 =head1 SYNOPSIS
 
@@ -390,14 +390,15 @@ sub process {
 		$self->{'values'},
 		$self->{specification},
 		$self->{template}, 
-		
+        0,
+        0,
 		);
 	my $shtml = $html->sprint;
 	return $shtml;
 }
 
 sub _sub_process {
-	my ($self, $html, $spec_xml,  $values, $spec, $root_template, $count) = @_;
+	my ($self, $html, $spec_xml,  $values, $spec, $root_template, $count, $level) = @_;
 	my ($template);
 	# Use root spec or sub-spec
 	my $specification = $spec || $self->_bootstrap_specification(string => "<specification>".$spec_xml->sprint."</specification>", 1);
@@ -411,21 +412,27 @@ sub _sub_process {
 	}
 	
 	my $classes = $specification->{classes};
-	my ($dbobj, $iter, $sth, $row, $lel, %paste_pos, $query);
+	my ($dbobj, $iter, $sth, $row, $lel, %paste_pos, $query, %skip);
 	
 	# Read one layer of spec
 	my $spec_elements = {};
 	for my $elt ( $spec_xml->descendants() ){
 		my $type = $elt->tag;
 		$spec_elements->{$type} ||= [];
+
+        # check whether to skip sublists on this level
+        if ($type eq 'list' && $elt->parent->tag eq 'list') {
+            if ($elt->parent ne $spec_xml) {
+                $skip{$elt} = 1;
+            }
+        }
 		push @{$spec_elements->{$type}}, $elt;
 		
 	}	
-	
-	## Replace values
-		
 	# List
-	for my $elt ( @{$spec_elements->{list}}, @{$spec_elements->{form}} ){
+	for my $elt ( @{$spec_elements->{list}} ) {
+        next if exists $skip{$elt};
+
 		my $spec_name = $elt->{'att'}->{'name'};
 		my $spec_class = $elt->{'att'}->{'class'} ? $elt->{'att'}->{'class'} : $spec_name;
 		my $sep_copy;
@@ -470,14 +477,13 @@ sub _sub_process {
 		my $list = $template->{lists}->{$spec_name};
 		my $count = 1;
 		for my $record_values (@$records){
-			
 			my $element = $element_template->copy();
-			$element = $self->_sub_process($element, $sub_spec, $record_values, undef, undef, $count);
-			
+			$element = $self->_sub_process($element, $sub_spec, $record_values, undef, undef, $count, $level + 1);
+
 			# Get rid of flutexml container and put it into position
 			for my $e (reverse($element->cut_children())) {
 				$e->paste(%paste_pos);
-       		}				
+       		}
 
 			# Add separator
 			if ($list->{separators}) {
@@ -488,25 +494,35 @@ sub _sub_process {
 					    last;
 					}
 			    }
-			}	
-			$count++;		
-		}
-		$element_template->cut(); # Remove template element
-			
-			if ($sep_copy) {
-			    # Remove last separator and original one(s) in the template
-			    $sep_copy->cut();
-			    
-			    for my $sep (@{$list->{separators}}) {
-					for my $elt (@{$sep->{elts}}) {
-					    $elt->cut();
-					}
-			    }
 			}
+			$count++;
 		}
-		
+
+		$element_template->cut(); # Remove template element
+
+        if ($sep_copy) {
+            # Remove last separator and original one(s) in the template
+            $sep_copy->cut();
+
+            for my $sep (@{$list->{separators}}) {
+                for my $elt (@{$sep->{elts}}) {
+                    $elt->cut();
+                }
+            }
+        }
+    }
+
 	# Values
 	for my $elt ( @{$spec_elements->{value}}, @{$spec_elements->{param}}, @{$spec_elements->{field}} ){	
+        if ($elt->tag eq 'param') {
+            my $name = $spec_xml->att('name');
+
+            if (defined $name && $name ne $elt->parent->att('name')) {
+                # don't process params of sublists again
+                next;
+            }
+        }
+
 		my $spec_id = $elt->{'att'}->{'id'};
 		my $spec_name = $elt->{'att'}->{'name'};
 		my $spec_class = $elt->{'att'}->{'class'} ? $elt->{'att'}->{'class'} : $spec_name;
@@ -519,12 +535,26 @@ sub _sub_process {
 		else {
 			$spec_clases = $classes->{$spec_class};
 		}
-		if ($spec_name eq 'label'){
-			1;
-		}
 		
 		for my $spec_class (@$spec_clases){
-			
+            # check if we need an iterator for this element
+            if ($self->{auto_iterators} && $spec_class->{iterator}) {
+                my ($iter_name, $iter);
+
+                $iter_name = $spec_class->{iterator};
+
+                unless ($specification->iterator($iter_name)) {
+                    if (ref($self->{values}->{$iter_name}) eq 'ARRAY') {
+                        $iter = Template::Flute::Iterator->new($self->{values}->{$iter_name});
+                    }
+                    else {
+                        $iter = Template::Flute::Iterator->new([]);
+                    }
+
+                    $specification->set_iterator($iter_name, $iter);
+                }
+            }
+
 			# Increment count
 			$spec_class->{increment} = new Template::Flute::Increment(
 				increment => $spec_class->{increment}->{increment},
@@ -615,7 +645,14 @@ sub _replace_within_elts {
 			    	my $rep_str_appended = $rep_str ? ($zref->{rep_att_orig} . $rep_str) : $zref->{rep_att_orig};
 					$elt->set_att($zref->{rep_att}, $rep_str_appended);
 			    }
-			
+
+            } elsif (exists $param->{op} && $param->{op} eq 'toggle') {
+                if ($rep_str) {
+                    $elt->set_att($zref->{rep_att});
+                }
+                else {
+                    $elt->del_att($zref->{rep_att});
+                }
 			} else {
 				if (defined $rep_str){
 					$elt->set_att($zref->{rep_att}, $rep_str);
@@ -661,7 +698,7 @@ sub _replace_record {
 		$raw = $rep_str;
 		
 		if (exists $value->{op}) {
-            if ($value->{op} eq 'toggle') {
+            if ($value->{op} eq 'toggle' && ! $value->{target}) {
                 if (exists $value->{args} && $value->{args} eq 'static') {
                     if ($rep_str) {
                         # preserve static text, like a container
@@ -817,6 +854,7 @@ sub value {
 		# process template and include it
 		%args = (template_file => $include_file,
 			 auto_iterators => $self->{auto_iterators},
+			 i18n => $self->{i18n},
              filters => $self->{filters},
 			 values => $value->{field} ? $self->{values}->{$value->{field}} : $self->{values});
 		
@@ -975,7 +1013,8 @@ Appends the param value to the text found in the HTML template.
 
 =item toggle
 
-Only shows corresponding HTML element if param value is set.
+Without target attribute, it only shows corresponding HTML element if param value is set.
+Wiht target attribute, it simply toggles the target attribute.
 
 =back
 
@@ -1188,6 +1227,56 @@ HTML output:
       <option value="black" selected="selected">Black</option>
       </select>
 
+=head3 Custom iterators for dropdowns
+
+By default, the iterator for a dropdown is an arrayref of hashrefs
+with two hardcoded keys: C<value> and (optionally) C<label>. You can
+override this behaviour in the specification with
+C<iterator_value_key> and C<iterator_name_key> to use your own
+hashref's keys from the iterator, instead of C<value> and C<label>.
+
+Specification:
+
+  <specification>
+    <value name="color" iterator="colors"
+           iterator_value_key="code" iterator_name_key="name"/>
+  </specification>
+
+Template:
+
+  <html>
+   <select class="color">
+   <option value="example">Example</option>
+   </select>
+  </html>
+
+Code:
+
+  @colors = ({code => 'red', name => 'Red'},
+             {code => 'black', name => 'Black'},
+            );
+  
+  $flute = Template::Flute->new(template => $html,
+                                specification => $spec,
+                                iterators => {colors => \@colors},
+                                values => { color => 'black' },
+                               );
+  
+  $out = $flute->process();
+
+Output:
+
+  <html>
+   <head></head>
+   <body>
+    <select class="color">
+     <option value="red">Red</option>
+     <option selected="selected" value="black">Black</option>
+    </select>
+   </body>
+  </html>
+
+
 =head1 LISTS
 
 Lists can be accessed after parsing the specification and the HTML template
@@ -1378,6 +1467,8 @@ a documentation fix.
 
 Thanks to Ton Verhagen for being a big supporter of my projects in all aspects.
 
+Thanks to Sam Batschelet helping me with a bug causing duplicate form fields (GH #14).
+
 Thanks to Terrence Brannon for spotting a documentation mix-up.
 
 =head1 HISTORY
@@ -1387,7 +1478,7 @@ a request from Matt S. Trout, author of the L<HTML::Zoom> module.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010-2013 Stefan Hornburg (Racke) <racke@linuxia.de>.
+Copyright 2010-2014 Stefan Hornburg (Racke) <racke@linuxia.de>.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published

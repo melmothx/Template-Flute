@@ -23,6 +23,25 @@ sub new {
 	$class = shift;
 	$self = {sob => $sob, static => $static, valid_input => undef};
 
+    # retrieve values for action and method attributes
+    my $action = $self->{sob}->{elts}->[0]->att('action');
+
+    if (defined $action) {
+        $self->{action} = $action;
+    }
+    else {
+        $self->{action} = '';
+    }
+
+    my $method = $self->{sob}->{elts}->[0]->att('method');
+
+    if (defined $method && $method =~ /\S/) {
+        $self->{method} = uc($method);
+    }
+    else {
+        $self->{method} = 'GET';
+    }
+
 	bless $self;
 }
 
@@ -208,6 +227,18 @@ sub set_action {
 	$self->{action} = $action;
 }
 
+=head2 method
+
+Returns current form method, e.g. GET or POST.
+
+=cut
+
+sub method {
+    my ($self) = @_;
+
+    return $self->{method};
+};
+
 =head2 set_method METHOD
 
 Sets form method to METHOD, e.g. GET or POST.
@@ -259,7 +290,9 @@ sub fill {
 					# don't override button text
 				}
 				elsif ($type eq 'checkbox') {
-					if ($value eq $elts[0]->att('value')) {
+                    my $att_value = $elts[0]->att('value');
+
+					if (defined $att_value && $value eq $att_value) {
 						$elts[0]->set_att('checked', 'checked');
 					}
 					else {
@@ -371,7 +404,7 @@ Stefan Hornburg (Racke), <racke@linuxia.de>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010-2013 Stefan Hornburg (Racke) <racke@linuxia.de>.
+Copyright 2010-2014 Stefan Hornburg (Racke) <racke@linuxia.de>.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published

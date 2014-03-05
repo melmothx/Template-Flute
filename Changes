@@ -1,5 +1,75 @@
 Revision history for Template::Flute
 
+0.0101 Thu Feb 27 11:20:36 2014 CET
+
+    [BUG FIXES]
+
+    * Fix bad escaping inside <script> tags (GH #6, GH #10, GH #27).
+
+0.0099 Mon Feb 10 20:17:42 2014 CET
+
+    [BUG FIXES]
+
+    * Pass through i18n parameter to included templates.
+
+0.0098 Sun Feb  9 10:46:39 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Add method method to Template::Flute::Form and retrieve HTML form attributes.
+
+    [BUG FIXES]
+
+    * Fix bug causing duplicate fields in form object (GH #24).
+
+0.0097 Mon Jan 27 19:10:16 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Implement toggle operation with target for params.
+
+    [BUG FIXES]
+
+    * Improve error handling in _parse_template method.
+
+0.0096 Wed Jan 22 20:00:18 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Add two level dotted values for containers.
+
+0.0095 Tue Jan 21 10:06:12 2014 CET
+
+    [BUG FIXES]
+
+    * Fix problem with vanished form (GH #23).
+
+0.0094 Tue Jan  7 13:19:12 2014 CET
+
+    [BUG FIXES]
+
+    * Fix processing of lists and params on the wrong nesting level.
+    * Fix t/values/select-objects.t to work with Perl <= 5.12.
+
+    [TESTS]
+
+    * Add tests for nested lists.
+
+0.0093 Fri Dec 20 16:13:45 2013 CET
+
+    [BUG FIXES]
+
+    * Fix iterators for value elements when using auto iterators.
+
+0.0092 Thu Dec 19 13:51:47 2013 CET
+
+    [ENHANCEMENTS]
+
+    * Add new specification attributes iterator_value_key and
+      iterator_name_key to select fields used in populating dropdowns.
+    * Add object detection to iterators used in value and field
+      specification elements.
+
 0.0091 Sun Dec  8 11:35:13 2013 CET
 
     [BUG FIXES]

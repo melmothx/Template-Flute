@@ -12,6 +12,7 @@ use Template::Flute::Increment;
 use Template::Flute::Container;
 use Template::Flute::List;
 use Template::Flute::Form;
+use Scalar::Util qw/blessed/;
 
 =head1 NAME
 
@@ -313,12 +314,17 @@ sub _parse_template {
 			$html_content = encode('utf8', $html_content);
 		}
 	}
-	$xml = $snippet ? $twig->parse($html_content) : $twig->parse_html($html_content);
+	$xml = $snippet ? $twig->safe_parse($html_content) : $twig->safe_parse_html($html_content);
 
 	unless ($xml) {
-		die "Invalid HTML template: $template: $@\n";
+        my $failure = '';
+        if ($@ =~ /, byte ([0-9]+) at/) {
+            $failure = '...' . substr($html_content, $1, 50) . '...';
+        }
+		die "Invalid HTML template: $html_content: $@ $failure\n";
 	}
 	
+        _fix_script_tags($xml);
 
 	$self->{xml} = $object->{xml} = $xml;
 
@@ -486,6 +492,9 @@ sub _elt_handler {
     }
     
 	if ($sob->{type} eq 'form') {
+        # only HTML <form> elements can be tied to 'form'
+        return $self if $elt->tag ne 'form';
+
 		$sob->{elts} = [$elt];
 
 		$self->{forms}->{$name} = new Template::Flute::Form ($sob);
@@ -530,6 +539,9 @@ sub _elt_handler {
 		
 		$self->{values}->{$name} = $sob;
 	} elsif ($sob->{type} eq 'field') {
+         # HTML <form> elements can't be tied to 'field'
+        return $self if $elt->tag eq 'form';
+        
 		# match for form field found in HTML
 		push (@{$sob->{elts}}, $elt);
 
@@ -647,22 +659,58 @@ sub _set_selected {
 		
 		$elt->cut_children($cond);
 		
+        # determine where to look for labels and values in the iterator
+        my $value_k = "value";
+        my $label_k = "label";
+        if (exists $sob->{iterator_value_key} && $sob->{iterator_value_key}) {
+            $value_k = $sob->{iterator_value_key};
+        }
+        if (exists $sob->{iterator_name_key} && $sob->{iterator_name_key}) {
+            $label_k = $sob->{iterator_name_key};
+        }
+
 		# get options from iterator		
 		$iter->reset();
 		while ($optref = $iter->next()) {
-			my (%att, $text);
-			
-			if (exists $optref->{label}) {
-				$text = $optref->{label};
-				$att{value} = $optref->{value};
-			}
-			else {
-				$text = $optref->{value};
-			}
 
-			if (defined $value && $optref->{value} eq $value) {
-				$att{selected} = 'selected';
-			}
+            # check the record if is an object
+            my $is_an_object = blessed($optref);
+
+			my (%att, $text);
+            my ($record_value, $record_label);
+
+            if ($is_an_object) {
+                # here we could also peek inside the object, but hey,
+                # if it's an object the correct practise is not to
+                # look inside it.
+                if ($optref->can("$value_k")) {
+                    $record_value = $optref->$value_k;
+                }
+                if ($optref->can("$label_k")) {
+                    $record_label = $optref->$label_k;
+                }
+            }
+            else {
+                if (exists $optref->{$value_k}) {
+                    $record_value = $optref->{$value_k};
+                }
+                if (exists $optref->{$label_k}) {
+                    $record_label = $optref->{$label_k};
+                }
+            }
+
+            if (defined $record_label) {
+                $text = $record_label;
+                $att{value} = $record_value;
+            }
+            else {
+                $text = $record_value;
+            }
+            if (defined $value and
+                defined $record_value and
+                $record_value eq $value) {
+                $att{selected} = 'selected';
+            }
 			
 			$elt->insert_new_elt('last_child', 'option',
 									 \%att, $text);
@@ -705,13 +753,19 @@ sub hook_html {
 	}
 	
 	$parser = new XML::Twig ();
-	unless ($html = $parser->safe_parse("<xmlHook>".$value."</xmlHook>")) {
-		die "Failed to parse HTML snippet: $@.\n";
+	unless ($html = $parser->safe_parse_html($value)) {
+        my $failure = '';
+        if ($@ =~ /, byte ([0-9]+) at/) {
+            $failure = '...' . substr($value, $1, 40)
+              . '...';
+        }
+		die "Failed to parse HTML snippet: $@. $failure\n";
 	}
+        _fix_script_tags($html);
 
 	$elt->cut_children();
 
-	@children = $html->root()->cut_children();
+	@children = $html->root()->first_child('body')->cut_children();
 	
 	for my $elt_hook (@children) {
 		$elt_hook->paste(last_child => $elt);
@@ -720,13 +774,25 @@ sub hook_html {
 	return;
 }
 
+sub _fix_script_tags {
+    my $parsed = shift;
+    # script tags should not be escaped. Please note that this should
+    # be safe. It affects only the *content* of the <script> tags. If
+    # your values contains injected JS, having the & escaped as &amp;
+    # or > as &gt; will not save you.
+    my @elts = $parsed->get_xpath('//script');
+    foreach my $el (@elts) {
+        $el->set_asis;
+    }
+}
+
 =head1 AUTHOR
 
 Stefan Hornburg (Racke), <racke@linuxia.de>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010-2013 Stefan Hornburg (Racke) <racke@linuxia.de>.
+Copyright 2010-2014 Stefan Hornburg (Racke) <racke@linuxia.de>.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
