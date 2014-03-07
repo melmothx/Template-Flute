@@ -17,7 +17,7 @@ WriteMakefile(
         'Test::Warnings' => 0,
         'Test::Fatal' => 0,
         'File::Slurp' => 0,
-        'XML::Twig' => 0,
+        'XML::Twig' => 3.45,
         'HTML::TreeBuilder' => 0,
         'Parse::RecDescent' => 0,
         'Moo' => 0,
