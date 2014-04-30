@@ -11,18 +11,24 @@ WriteMakefile(
       ? ('LICENSE'=> 'perl')
       : ()),
     PL_FILES            => {},
-    PREREQ_PM => {
+    BUILD_REQUIRES => {
+        'Test::Deep' => 0,
         'Test::More' => 0,
         'Test::Warn' => 0,
         'Test::Warnings' => 0,
         'Test::Fatal' => 0,
+    },
+    PREREQ_PM => {
+        'Data::Transpose' => 0.0009,
         'File::Slurp' => 0,
-        'XML::Twig' => 0,
+        'XML::Twig' => 3.48,
         'HTML::TreeBuilder' => 0,
         'Parse::RecDescent' => 0,
-        'Moo' => 0,
+        'Moo' => 1.001000,
         'Scalar::Util' => 0,
+        'URI' => 0,
     },
+    EXE_FILES => [ 'scripts/flute' ],
     META_MERGE        => {
         resources => {
             repository  => 'https://github.com/racke/Template-Flute.git',

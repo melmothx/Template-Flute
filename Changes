@@ -1,5 +1,167 @@
 Revision history for Template::Flute
 
+0.0116 Wed Apr 30 09:57:19 2014 CEST
+
+    [BUG FIXES]
+
+    * Consider undefined values as empty strings (GH #45, Marco Pessotto).
+
+0.0115 Wed Apr 23 15:33:08 2014 CEST
+
+    [BUG FIXES]
+
+    * Skip URI adjust for link elements without target attribute (<a href, <img src, ...).
+
+0.0114 Wed Apr 16 09:21:36 2014 CEST
+
+    [TESTS]
+
+    * Require XML::Twig 3.48 and adjust tests accordingly
+      (GH #44, Marco Pessotto).
+
+    * Remove -T switch from regular tests
+      (GH #44, Marco Pessotto).
+
+0.0113 Tue Apr 15 17:37:41 2014 CEST
+
+    [ENHANCEMENTS]
+
+    * Add support for embedding images in emails (GH #43, Marco Pessotto).
+
+    [DOCUMENTATION]
+
+    * Fix documentation bug for op="toggle" (GH #42, Marco Pessotto).
+    * Add POD documentation on attributes for Pager class.
+
+    [TESTS]
+
+    * Add tests for op="toggle" (GH #42, Marco Pessotto).
+
+0.0112 Wed Apr  2 06:57:38 2014 CEST
+
+    [BUG FIXES]
+
+    * Fix empty dropdown produced by value element with scalar iterator.
+
+0.0111 Tue Apr  1 11:28:25 2014 CEST
+
+    [BUG FIXES]
+
+    * Skip processing of paging elements which aren't specified.
+
+    [TESTS]
+
+    * Enable twig test for XML::Twig 3.47 and newer as the bug is fixed now.
+
+0.0110 Sat Mar 29 12:22:15 2014 CET
+
+    [BUG FIXES]
+
+    * Add missing prerequisite on Data::Transpose.
+
+    [TESTS]
+
+    * Enable entities test for XML::Twig 3.47 and newer as the bug is fixed now.
+
+0.0109 Sat Mar 22 18:55:08 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Add experimental support for paging.
+    * Split prerequisites into build and runtime prerequisites.
+
+    [BUG FIXES]
+
+    * Fix missing POD escape in Template::Flute::Specification's dangling method documentation.
+
+    [TESTS]
+
+    *  Show resulting HTML in case of an error in entities test.
+
+0.0108 Thu Mar 13 18:41:15 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Use list values as an iterator if they are an appropriate object.
+
+    [BUG FIXES]
+
+    * Fix another case where a param is processed outside of its list.
+    * Bumped up minimum version of Moo (Marco Pessotto, GH #38).
+
+0.0107 Sun Mar  9 15:30:50 2014 CET
+
+    [BUG FIXES]
+
+    * Add missing files for URI adjust feature to MANIFEST.
+
+    [DOCUMENTATION]
+
+    * Add documentaton to UriAdjust module.
+
+0.0106 Sun Mar  9 13:36:42 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Add URI adjust feature.
+
+    [BUG FIXES]
+
+    * Call is_filled form method only on an existing form object.
+
+0.0105 Sat Mar  8 14:28:22 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Use hash reference instead of string concatenation for dump key produced by dangling method.
+    * Install flute script.
+
+    [BUG FIXES]
+
+    * Use Test::Deep for checking output of dangling method to avoid hash randomization problem (GH #35).
+
+    [DOCUMENTATION]
+
+    * Add section "OBJECTS AND STRUCTURES" to main POD (Marco Pessotto).
+    * Fix bugtracker location.
+    * Improve documentation of dangling method.
+
+    [TESTS]
+
+    * Add objects and structures test (Marco Pessotto).
+
+0.0104 Fri Mar  7 13:00:12 2014 CET
+
+    [ENHANCEMENTS]
+
+    * Add check for dangling specification elements (GH #30, Marco Pessotto).
+    * Add blacklist for object autodetection (GH #33, Marco Pessotto).
+
+    [BUG FIXES]
+
+    * Skip processing params for empty lists at the end of the _sub_process method (GH #25).
+
+0.0103 Thu Mar  6 18:08:44 2014 CET
+
+    [BUG FIXES]
+
+    * Let top level containers affect lists too (GH #32, Marco Pessotto)
+
+0.0102 Wed Mar  5 16:26:44 2014 CET
+
+    [SPECIAL]
+
+    * First airborne CPAN release.
+
+    [BUG FIXES]
+
+    * Fix duplicates in dropdowns (GH #31, Marco Pessotto)
+    * Prevent Perl warning caused by HTML checkboxes without value attribute.
+
+    [TESTS]
+
+    * Add test for &nbsp; (GH #28, Marco Pessotto)
+
 0.0101 Thu Feb 27 11:20:36 2014 CET
 
     [BUG FIXES]

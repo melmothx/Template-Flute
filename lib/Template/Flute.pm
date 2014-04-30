@@ -10,6 +10,7 @@ use Template::Flute::Specification::XML;
 use Template::Flute::HTML;
 use Template::Flute::Iterator;
 use Template::Flute::Increment;
+use Template::Flute::Pager;
 use Template::Flute::Paginator;
 
 =head1 NAME
@@ -18,11 +19,11 @@ Template::Flute - Modern designer-friendly HTML templating Engine
 
 =head1 VERSION
 
-Version 0.0101
+Version 0.0116
 
 =cut
 
-our $VERSION = '0.0101';
+our $VERSION = '0.0116';
 
 =head1 SYNOPSIS
 
@@ -37,6 +38,9 @@ our $VERSION = '0.0101';
                            template_file => 'cart.html',
                            iterators => {cart => $cart},
                            values => \%values,
+                           autodetect => {
+                                          disable => [qw/Foo::Bar/],
+                                         }
                            );
 
     print $flute->process();
@@ -206,6 +210,49 @@ Hash reference of values to be used by the process method.
 
 Builds iterators automatically from values.
 
+=item autodetect
+
+A configuration option. It should be an hashref with a key C<disable>
+and a value with an arrayref with a list of B<classes> for objects
+which should be considered plain hashrefs instead. Example:
+
+  my $flute = Template::Flute->new(....
+                                   autodetect => { disable => [qw/My::Object/] },
+                                   ....
+                                  );
+
+Doing so, if you pass a value holding a C<My::Object> object, and you have a specification with something like this:
+
+  <specification>
+   <value name="name" field="object.method"/>
+  </specification>
+
+The value will be C<$object->{method}>, not C<$object->$method>.
+
+The object is checked with C<isa>.
+
+Classical example: C<Dancer::Session::Abstract>.
+
+=item uri
+
+Base URI for your template. This adjusts the links in the HTML tags
+C<a>, C<base>, C<img>, C<link> and C<script>.
+
+=item email_cids
+
+This is meant to be used on HTML emails. When this is set to an hash
+reference (which should be empty), the hash will be populated with the
+following values:
+
+  cid1 => { filename => 'foo.png' },
+  cid2 => { filename => 'foo2.gif' },
+
+and in the body the images C<src> attribute will be replaced with
+C<cid:cid1>.
+
+The cid names are arbitrary and assigned by the template. The code
+should look at the reference values which were modified.
+
 =back
 
 =cut
@@ -342,7 +389,8 @@ sub _bootstrap_template {
 	my ($self, $source, $template, $snippet) = @_;
 	my ($template_object);
 
-	$template_object = new Template::Flute::HTML;
+	$template_object = new Template::Flute::HTML(uri => $self->{uri},
+                                                 email_cids => $self->{email_cids});
 	
 	if ($source eq 'file') {
 		$template_object->parse_file($template, $self->{specification}, $snippet);
@@ -399,7 +447,7 @@ sub process {
 
 sub _sub_process {
 	my ($self, $html, $spec_xml,  $values, $spec, $root_template, $count, $level) = @_;
-	my ($template);
+	my ($template, %list_active);
 	# Use root spec or sub-spec
 	my $specification = $spec || $self->_bootstrap_specification(string => "<specification>".$spec_xml->sprint."</specification>", 1);
 	
@@ -429,6 +477,19 @@ sub _sub_process {
 		push @{$spec_elements->{$type}}, $elt;
 		
 	}	
+
+    # cut the elts in the template, *before* processing the lists
+    if ($level == 0) {
+        for my $container ($template->containers()) {
+            $container->set_values($values) if $values;
+            unless ($container->visible()) {
+                for my $elt (@{$container->elts()}) {
+                    $elt->cut();
+                }
+            }
+        }
+    }
+
 	# List
 	for my $elt ( @{$spec_elements->{list}} ) {
         next if exists $skip{$elt};
@@ -476,7 +537,29 @@ sub _sub_process {
 
 		my $list = $template->{lists}->{$spec_name};
 		my $count = 1;
-		for my $record_values (@$records){
+        my $iter_records;
+
+        if (defined blessed $records) {
+            # check whether this object can serve as iterator
+            if ($records->can('next') && $records->can('count')) {
+                $iter_records = $records;
+            }
+            else {
+                die "Object cannot be used as iterator for list $spec_name: ", ref($records);
+            }
+        }
+        else {
+            $iter_records = Template::Flute::Iterator->new(@$records);
+        }
+
+        if ($iter_records->count) {
+            $list_active{$spec_name} = 1;
+        }
+        else {
+            $list_active{$spec_name} = 0;
+        }
+
+		while (my $record_values = $iter_records->next) {
 			my $element = $element_template->copy();
 			$element = $self->_sub_process($element, $sub_spec, $record_values, undef, undef, $count, $level + 1);
 
@@ -500,6 +583,11 @@ sub _sub_process {
 
 		$element_template->cut(); # Remove template element
 
+        if ($list->{paging}) {
+            $iter_records->reset;
+            $self->_paging($list, $iter_records);
+        }
+
         if ($sep_copy) {
             # Remove last separator and original one(s) in the template
             $sep_copy->cut();
@@ -516,13 +604,18 @@ sub _sub_process {
 	for my $elt ( @{$spec_elements->{value}}, @{$spec_elements->{param}}, @{$spec_elements->{field}} ){	
         if ($elt->tag eq 'param') {
             my $name = $spec_xml->att('name');
+            my $parent_name = $elt->parent->att('name');
 
-            if (defined $name && $name ne $elt->parent->att('name')) {
+            if (! defined $name || $name ne $parent_name) {
                 # don't process params of sublists again
                 next;
             }
-        }
 
+            if (exists $list_active{$parent_name} && ! $list_active{$parent_name}) {
+                # don't process params for empty lists
+                 next;
+            }
+        }
 		my $spec_id = $elt->{'att'}->{'id'};
 		my $spec_name = $elt->{'att'}->{'name'};
 		my $spec_class = $elt->{'att'}->{'class'} ? $elt->{'att'}->{'class'} : $spec_name;
@@ -537,6 +630,11 @@ sub _sub_process {
 		}
 		
 		for my $spec_class (@$spec_clases){
+            # check if it's a form and it's already filled
+            if (exists $spec_class->{form} && $spec_class->{form}) {
+                my $form = $self->template->form($spec_class->{form});
+                next if $form && $form->is_filled;
+            }
             # check if we need an iterator for this element
             if ($self->{auto_iterators} && $spec_class->{iterator}) {
                 my ($iter_name, $iter);
@@ -544,7 +642,18 @@ sub _sub_process {
                 $iter_name = $spec_class->{iterator};
 
                 unless ($specification->iterator($iter_name)) {
-                    if (ref($self->{values}->{$iter_name}) eq 'ARRAY') {
+		    my $maybe_iter = $self->{values}->{$iter_name};
+
+		    if (defined blessed $maybe_iter) {
+			if ($maybe_iter->can('next') &&
+			    $maybe_iter->can('count')) {
+			    $iter = $maybe_iter;
+			}
+			else {
+			    die "Object cannot be used as iterator for value $spec_name: ", ref($maybe_iter);
+			}
+		    }
+                    elsif (ref($self->{values}->{$iter_name}) eq 'ARRAY') {
                         $iter = Template::Flute::Iterator->new($self->{values}->{$iter_name});
                     }
                     else {
@@ -564,46 +673,19 @@ sub _sub_process {
 			$self->_replace_record($spec_name, $values, $spec_class, $spec_class->{elts});
 		}
 	}
-  	
-	
-	for my $container ($template->containers()) {
-		$container->set_values($values) if $values;
-		
-		unless ($container->visible()) {
-		    for my $elt (@{$container->elts()}) {
-			$elt->cut();
-		    }
-		}
-	}
+
+    # cut again the invisible containers, after the values are interpolated
+    if ($level == 0) {
+        for my $container ($template->containers()) {
+            unless ($container->visible()) {
+                for my $elt (@{$container->elts()}) {
+                    $elt->cut();
+                }
+            }
+        }
+    }
 
 	return $count ? $template->{xml}->root() : $template->{xml};	
-}
-
-sub _paging_link {
-    my ($self, $elt, $paging_link, $paging_page) = @_;
-    my ($path, $uri);
-
-    if (ref($paging_link) =~ /^URI::/) {
-        # add to path
-        $uri = $paging_link->clone;
-        if ($paging_page == 1) {
-            $uri->path(join('/', $paging_link->path));
-        }
-        else {
-            $uri->path(join('/', $paging_link->path, $paging_page));
-        }
-        $path = $uri->as_string;
-    }
-    else {
-        if ($paging_page == 1) {
-            $path = "/$paging_link";
-        }
-        else {
-            $path = "/$paging_link/$paging_page";
-        }
-    }
-
-    $elt->set_att(href => $path);
 }
 
 sub _replace_within_elts {
@@ -820,6 +902,185 @@ sub _filter {
     return $filter_obj->filter($value);
 }
 
+sub _paging {
+    my ($self, $list, $iterator) = @_;
+
+    # turn iterator into paginator
+    my $page_size = $list->{paging}->{page_size} || 20;
+
+    my ($iter, $pager);
+
+    if (defined blessed($iterator)
+            && $iterator->can('pager')
+                && ($pager = $iterator->pager)) {
+        $iter = Template::Flute::Pager->new(iterator => $pager,
+                                            page_size => $page_size);
+    }
+    else {
+        $iter = Template::Flute::Paginator->new(iterator => $iterator,
+                                                page_size => $page_size);
+    }
+
+    if ($iter->pages > 1) {
+        my ($element_orig, $element_copy, %element_pos, $element_link,
+            $paging_page, $paging_link, $slide_length, $element, $element_active, $paging_min, $paging_max);
+
+        $slide_length = $list->{paging}->{slide_length} || 0;
+
+        $paging_min = 1;
+        $paging_max = $iter->pages;
+
+        if ($slide_length > 0) {
+            # determine the page numbers to show up
+            if ($iter->pages > $slide_length) {
+                $paging_min = int($paging_page - $slide_length / 2);
+
+                if ($paging_min < 1) {
+                    $paging_min = 1;
+                }
+
+                $paging_max = $paging_min + $slide_length - 1;
+            }
+        }
+
+        $paging_page = $iter->current_page;
+
+        for my $type (qw/first previous next last active standard/) {
+            if ($element = $list->{paging}->{elements}->{$type}) {
+                $element_orig = shift @{$element->{elts}};
+                next unless $element_orig;
+
+                # cut any other elements
+                for my $sf (@{$element->{elts}}) {
+                    $sf->cut;
+                }
+            }
+	    else {
+		# skip processing of paging elements which aren't specified
+		next;
+            }
+
+            if ($element_orig->is_last_child()) {
+                %element_pos = (last_child => $element_orig->parent());
+            } elsif ($element_orig->next_sibling()) {
+                %element_pos = (before => $element_orig->next_sibling());
+            } else {
+                die "Neither last child nor next sibling.";
+            }
+
+            if ($element->{type} eq 'active') {
+                $element_active = $element_orig;
+            } elsif ($element->{type} eq 'standard') {
+                for (1 .. $iter->pages) {
+                    next if $_ < $paging_min || $_ > $paging_max;
+
+                    if ($_ == $paging_page) {
+                                # Move active element here
+                        if ($element_active->{"flute_active"}->{rep_elt}) {
+                            $element_active->{"flute_active"}->{rep_elt}->set_text($_);
+                        } else {
+                            $element_active->set_text($_);
+                        }
+
+                        $element_copy = $element_active->cut;
+                        $element_copy->paste(%element_pos);
+                        next;
+                    }
+
+                    # Adjust text
+                    if ($element_orig->{"flute_$element->{name}"}->{rep_elt}) {
+                        $element_orig->{"flute_$element->{name}"}->{rep_elt}->set_text($_);
+                    } else {
+                        $element_orig->set_text($_);
+                    }
+
+                    # Adjust link
+                    if ($element_link = $element_orig->first_descendant('a')) {
+                        $self->_paging_link($element_link, $paging_link, $_);
+                    }
+
+                    # Copy HTML element
+                    $element_copy = $element_orig->copy;
+                    $element_copy->paste(%element_pos);
+                }
+
+                $element_orig->cut;
+            } elsif ($element->{type} eq 'first') {
+                if ($paging_page > 1) {
+                    # Adjust link
+                    if ($element_link = $element_orig->first_descendant('a')) {
+                        $self->_paging_link($element_link, $paging_link, 1);
+                    }
+                } else {
+                    $element_orig->cut;
+                }
+            } elsif ($element->{type} eq 'last') {
+                if ($paging_page < $iter->pages) {
+                    # Adjust link
+                    if ($element_link = $element_orig->first_descendant('a')) {
+                        $self->_paging_link($element_link, $paging_link, $iter->pages);
+                    }
+                } else {
+                    $element_orig->cut;
+                }
+            } elsif ($element->{type} eq 'next') {
+                if ($paging_page < $iter->pages) {
+                    # Adjust link
+                    if ($element_link = $element_orig->first_descendant('a')) {
+                        $self->_paging_link($element_link, $paging_link, $paging_page + 1);
+                    }
+                } else {
+                    $element_orig->cut;
+                }
+            } elsif ($element->{type} eq 'previous') {
+                if ($paging_page > 1) {
+                    # Adjust link
+                    if ($element_link = $element_orig->first_descendant('a')) {
+                        $self->_paging_link($element_link, $paging_link, $paging_page - 1);
+                    }
+                } else {
+                    $element_orig->cut;
+                }
+            }
+        }
+    } else {
+        # remove paging area
+        for my $paging_elt (@{$list->{paging}->{elts}}) {
+            $paging_elt->cut;
+        }
+    }
+}
+
+sub _paging_link {
+    my ($self, $elt, $paging_link, $paging_page) = @_;
+    my ($path, $uri);
+
+    if (ref($paging_link) =~ /^URI::/) {
+        # add to path
+        $uri = $paging_link->clone;
+        if ($paging_page == 1) {
+            $uri->path(join('/', $paging_link->path));
+        }
+        else {
+            $uri->path(join('/', $paging_link->path, $paging_page));
+        }
+        $path = $uri->as_string;
+    }
+    elsif ($paging_link) {
+        if ($paging_page == 1) {
+            $path = "/$paging_link";
+        }
+        else {
+            $path = "/$paging_link/$paging_page";
+        }
+    }
+    else {
+        $path = $paging_page;
+    }
+
+    $elt->set_att(href => $path);
+}
+
 =head2 value NAME
 
 Returns the value for NAME.
@@ -829,10 +1090,9 @@ Returns the value for NAME.
 sub value {
 	my ($self, $value, $values) = @_;
 	my ($raw_value, $ref_value, $rep_str, $record_is_object, $key);
-
 	$ref_value = $values;
-	$record_is_object = defined blessed $ref_value;
-	
+	$record_is_object = $self->_is_record_object($ref_value);
+
 	if ($self->{scopes}) {
 		if (exists $value->{scope}) {
 			$ref_value = $self->{values}->{$value->{scope}};
@@ -856,7 +1116,10 @@ sub value {
 			 auto_iterators => $self->{auto_iterators},
 			 i18n => $self->{i18n},
              filters => $self->{filters},
-			 values => $value->{field} ? $self->{values}->{$value->{field}} : $self->{values});
+			 values => $value->{field} ? $self->{values}->{$value->{field}} : $self->{values},
+                 uri => $self->{uri},
+                 email_cids => $self->{email_cids},
+         );
 		
 		$raw_value = Template::Flute->new(%args)->process();
 	}
@@ -868,7 +1131,7 @@ sub value {
 
             for $lookup (@{$value->{field}}) {
                 if (ref($raw_value)) {
-                    if (defined blessed $raw_value) {
+                    if ($self->_is_record_object($raw_value)) {
                         $raw_value = $raw_value->$lookup;
                     }
                     elsif (exists $raw_value->{$lookup}) {
@@ -894,6 +1157,13 @@ sub value {
 	else {
        	$key = $value->{name};
         $raw_value = $record_is_object ? $ref_value->$key : $ref_value->{$key};
+
+        # if the value is undef, but the type is 'value', set it to
+        # the empty string. this way we prevent template values to pop
+        # up because no action is done somewhere else.
+        if (!defined($raw_value) and $value->{type} eq 'value') {
+            $raw_value = '';
+        }
 	}
 
 	if ($value->{filter}) {
@@ -909,6 +1179,38 @@ sub value {
 	
 	return $rep_str;
 }
+
+# internal helpers
+
+sub _is_record_object {
+    my ($self, $record) = @_;
+    my $class = blessed($record);
+    return unless defined $class;
+
+    # it's an object. Check if we have it in the blacklist
+    my @ignores = $self->_autodetect_ignores;
+    my $is_good_object = 1;
+    foreach my $i (@ignores) {
+        if ($record->isa($i)) {
+            $is_good_object = 0;
+            last;
+        }
+    }
+    return $is_good_object;
+}
+
+sub _autodetect_ignores {
+    my $self = shift;
+    my @ignores;
+    if (exists $self->{autodetect} and exists $self->{autodetect}->{disable}) {
+        @ignores = @{ $self->{autodetect}->{disable} };
+    }
+    foreach my $f (@ignores) {
+        die "empty string in the disabled autodetections" unless length($f);
+    }
+    return @ignores;
+}
+
 
 =head2 set_values HASHREF
 
@@ -1021,8 +1323,17 @@ Appends the param value to the text found in the HTML template.
 
 =item toggle
 
-Without target attribute, it only shows corresponding HTML element if param value is set.
-Wiht target attribute, it simply toggles the target attribute.
+When the C<args> attribute is set to C<tree>, it doesn't interpolate
+anything and just shows corresponding HTML element if param value is
+set.
+
+With C<target> attribute, it simply toggles the target attribute.
+
+Otherwise, if value is true, shows the HTML element and set its
+content to the value. If value is false, removes the HTML element.
+
+So, if your element has children elements, you probably want to use
+the C<args="tree"> attribute (see below for an example).
 
 =back
 
@@ -1299,6 +1610,63 @@ addressed in this way.
 
 See L<Template::Flute::List> for details about lists.
 
+=head1 OBJECTS AND STRUCTURES
+
+You can pass objects and hashrefs as values. To access a key or an
+accessor, you have to use a dotted notation with C<field>. An example
+for both hashrefs and objects follows.
+
+Specification:
+
+  <specification>
+   <value name="object" field="myobject.method" />
+   <value name="struct" field="mystruct.key" />
+  </specification>
+
+
+HTML:
+
+  <html>
+    <body>
+      <span class="object">Welcome back!</span>
+      <span class="struct">Another one</span>
+    </body>
+  </html>
+
+
+Code:
+
+  package My::Object;
+  sub new {
+      my $class = shift;
+      bless {}, $class;
+  }
+  sub method {
+      return "Hello from the method";
+  }
+  package main;
+  my $flute = Template::Flute->new(
+      specification => $spec,
+      template => $html,
+      values => {
+          myobject => My::Object->new,
+          mystruct => { key => "Hello from hash" },
+         }
+     );
+
+C<process> will return:
+
+  <html>
+    <head></head>
+    <body>
+      <span class="object">Hello from the method</span>
+      <span class="struct">Hello from hash</span>
+    </body>
+  </html>
+
+Sometimes you need to treat an object like an hashref. How to do that
+is explained under the C<autodetect> option for the constructor.
+
 =head1 FORMS
 
 Forms can be accessed after parsing the specification and the HTML template
@@ -1434,8 +1802,7 @@ Stefan Hornburg (Racke), <racke@linuxia.de>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-template-flute at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Template-Flute>.
+Please report any bugs or feature requests at L<https://github.com/racke/Template-Flute/issues>.
 
 =head1 SUPPORT
 
@@ -1446,10 +1813,6 @@ You can find documentation for this module with the perldoc command.
 You can also look for information at:
 
 =over 4
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Template-Flute>
 
 =item * AnnoCPAN: Annotated CPAN documentation
 

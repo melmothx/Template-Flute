@@ -55,6 +55,18 @@ sub new {
 	bless $self;
 }
 
+sub _ids {
+    return keys %{shift->{ids}};
+}
+
+sub _classes {
+    return keys %{shift->{classes}};
+}
+
+sub _names {
+    return keys %{shift->{names}};
+}
+
 =head1 METHODS
 
 =head2 name NAME
@@ -302,10 +314,14 @@ Add value specified by hash reference VALUE.
 sub value_add {
 	my ($self, $new_valueref) = @_;
 	my ($valueref, $value_name, $id, $class);
-	
+
 	$value_name = $new_valueref->{value}->{name};
 
-	if (exists $new_valueref->{value}->{include}) {
+    unless (defined $value_name && $value_name =~ /\S/) {
+        die "Value needs a name attribute.";
+    }
+
+    if (exists $new_valueref->{value}->{include}) {
 		# include implies hooking resulting value
 		$new_valueref->{value}->{op} = 'hook';
 	}
@@ -483,7 +499,7 @@ sub resolve_iterator {
 		$iter = $self->{iters}->{$input};
 	}
 	else {
-		die "Failed to resolve iterator $input.";
+		die "Failed to resolve iterator $input.\n";
 	}
 
 	return $iter;
@@ -556,14 +572,92 @@ sub list_paging {
 	}	
 }
 
+=head2 dangling
+
+Method to check if the template is consistent with the specification.
+The method retrieves the list of ids, classes and names, and check if
+there are template elements attached.
+
+For each specification element without template elements attached,
+it produces a hash reference with the name, type and a dump of the element.
+
+It returns a list of these hash references, so you can check the template with
+
+    my $flute = Template::Flute->new(....);
+    my @bad_elts = $flute->specification->dangling;
+
+    if (@bad_elts) {
+        warn "empty elements" . Dumper(\@bad_elts);
+    }
+    else {
+        print "all ok\n";
+    }
+
+Each hashref returned has the following keys set:
+
+=over 4
+
+=item name
+
+=item type
+
+=item dump
+
+=back
+
+Beware that to call this method successfully, the specification must
+already be processed, so it's safer to call it after C<$flute-E<gt>process>.
+
+=cut
+
+
+sub dangling {
+    my $self = shift;
+    my @empty;
+    my %methods = (
+                   id => {
+                          list => '_ids',
+                          elts => 'elements_by_id',
+                         },
+                   name => {
+                            list => '_names',
+                            elts => 'elements_by_name',
+                           },
+                   class => {
+                             list => '_classes',
+                             elts => 'elements_by_class',
+                            },
+                 );
+    foreach my $internal (keys %methods) {
+        my $method       = $methods{$internal}{list};
+        my $get_elements = $methods{$internal}{elts};
+
+        my @structs = $self->$method;
+        foreach my $struct (@structs) {
+            # here we have to look in the internals
+            if (my $arrayref = $self->$get_elements($struct)) {
+                foreach my $el (@$arrayref) {
+                    unless (exists ($el->{elts})) {
+                        push @empty, {
+                                      type => $internal,
+                                      name => $struct,
+                                      dump => $el,
+                                     }
+                    }
+                }
+            }
+        }
+    }
+    return @empty;
+}
+
 =head1 AUTHOR
 
 Stefan Hornburg (Racke), C<< <racke at linuxia.de> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-template-flute at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Template-Flute>.
+Please report any bugs or feature requests at L<https://github.com/racke/Template-Flute/issues>.
 
 =head1 LICENSE AND COPYRIGHT
 

@@ -1,18 +1,11 @@
 use strict;
 use warnings;
-use Test::More;
+use Test::More tests => 3;
 use Template::Flute;
 use utf8;
 binmode STDOUT, ":encoding(utf-8)";
 
 use XML::Twig;
-
-if ($XML::Twig::VERSION > 3.39) {
-    plan skip_all => "WARNING! Your XML::Twig version probably contains a bug when parsing entities!. Skipping test";
-}
-else {
-    plan tests => 3;
-}
 
 my $layout_html = << 'EOF';
 <html>
@@ -52,12 +45,14 @@ my $out = $flute->process();
 
 my $expected = q{<div id="body">v&amp;r</div><div id="test">  v&amp;r</div><span id="spanning" style="display:none">hello</span>};
 ok((index($out, $expected) >= 0),
-  "body rendered");
+  "body rendered") || diag "Out: $out";
 
 my $layout = Template::Flute->new(specification => $layout_spec,
                                   template => $layout_html,
                                   values => {content => $out});
 
 my $final = $layout->process;
-ok ((index($final, $expected) >= 0), "the layout contains the body");
-ok ((index($final, q{<div id="test"> </div>}) >= 0), "the layout has the decoded &nbsp;");
+ok ((index($final, $expected) >= 0), "the layout contains the body")
+    || diag "Out: $final";
+ok ((index($final, q{<div id="test"> </div>}) >= 0), "the layout has the decoded &nbsp;")
+    || diag "Out: $final";

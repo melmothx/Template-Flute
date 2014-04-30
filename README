@@ -2,7 +2,7 @@ NAME
     Template::Flute - Modern designer-friendly HTML templating Engine
 
 VERSION
-    Version 0.0101
+    Version 0.0116
 
 SYNOPSIS
         use Template::Flute;
@@ -16,6 +16,9 @@ SYNOPSIS
                                template_file => 'cart.html',
                                iterators => {cart => $cart},
                                values => \%values,
+                               autodetect => {
+                                              disable => [qw/Foo::Bar/],
+                                             }
                                );
 
         print $flute->process();
@@ -163,6 +166,46 @@ CONSTRUCTOR
     auto_iterators
         Builds iterators automatically from values.
 
+    autodetect
+        A configuration option. It should be an hashref with a key `disable'
+        and a value with an arrayref with a list of classes for objects
+        which should be considered plain hashrefs instead. Example:
+
+          my $flute = Template::Flute->new(....
+                                           autodetect => { disable => [qw/My::Object/] },
+                                           ....
+                                          );
+
+        Doing so, if you pass a value holding a `My::Object' object, and you
+        have a specification with something like this:
+
+          <specification>
+           <value name="name" field="object.method"/>
+          </specification>
+
+        The value will be `$object-'{method}>, not `$object-'$method>.
+
+        The object is checked with `isa'.
+
+        Classical example: `Dancer::Session::Abstract'.
+
+    uri Base URI for your template. This adjusts the links in the HTML tags
+        `a', `base', `img', `link' and `script'.
+
+    email_cids
+        This is meant to be used on HTML emails. When this is set to an hash
+        reference (which should be empty), the hash will be populated with
+        the following values:
+
+          cid1 => { filename => 'foo.png' },
+          cid2 => { filename => 'foo2.gif' },
+
+        and in the body the images `src' attribute will be replaced with
+        `cid:cid1'.
+
+        The cid names are arbitrary and assigned by the template. The code
+        should look at the reference values which were modified.
+
 METHODS
   process [HASHREF]
     Processes HTML template, manipulates the HTML tree based on the
@@ -246,9 +289,18 @@ SPECIFICATION
             Appends the param value to the text found in the HTML template.
 
         toggle
-            Without target attribute, it only shows corresponding HTML
-            element if param value is set. Wiht target attribute, it simply
-            toggles the target attribute.
+            When the `args' attribute is set to `tree', it doesn't
+            interpolate anything and just shows corresponding HTML element
+            if param value is set.
+
+            With `target' attribute, it simply toggles the target attribute.
+
+            Otherwise, if value is true, shows the HTML element and set its
+            content to the value. If value is false, removes the HTML
+            element.
+
+            So, if your element has children elements, you probably want to
+            use the `args="tree"' attribute (see below for an example).
 
         Other attributes for param elements are:
 
@@ -481,6 +533,60 @@ LISTS
 
     See Template::Flute::List for details about lists.
 
+OBJECTS AND STRUCTURES
+    You can pass objects and hashrefs as values. To access a key or an
+    accessor, you have to use a dotted notation with `field'. An example for
+    both hashrefs and objects follows.
+
+    Specification:
+
+      <specification>
+       <value name="object" field="myobject.method" />
+       <value name="struct" field="mystruct.key" />
+      </specification>
+
+    HTML:
+
+      <html>
+        <body>
+          <span class="object">Welcome back!</span>
+          <span class="struct">Another one</span>
+        </body>
+      </html>
+
+    Code:
+
+      package My::Object;
+      sub new {
+          my $class = shift;
+          bless {}, $class;
+      }
+      sub method {
+          return "Hello from the method";
+      }
+      package main;
+      my $flute = Template::Flute->new(
+          specification => $spec,
+          template => $html,
+          values => {
+              myobject => My::Object->new,
+              mystruct => { key => "Hello from hash" },
+             }
+         );
+
+    `process' will return:
+
+      <html>
+        <head></head>
+        <body>
+          <span class="object">Hello from the method</span>
+          <span class="struct">Hello from hash</span>
+        </body>
+      </html>
+
+    Sometimes you need to treat an object like an hashref. How to do that is
+    explained under the `autodetect' option for the constructor.
+
 FORMS
     Forms can be accessed after parsing the specification and the HTML
     template through the HTML template object:
@@ -594,9 +700,8 @@ AUTHOR
     Stefan Hornburg (Racke), <racke@linuxia.de>
 
 BUGS
-    Please report any bugs or feature requests to `bug-template-flute at
-    rt.cpan.org', or through the web interface at
-    http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Template-Flute.
+    Please report any bugs or feature requests at
+    https://github.com/racke/Template-Flute/issues.
 
 SUPPORT
     You can find documentation for this module with the perldoc command.
@@ -604,9 +709,6 @@ SUPPORT
         perldoc Template::Flute
 
     You can also look for information at:
-
-    * RT: CPAN's request tracker
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Template-Flute
 
     * AnnoCPAN: Annotated CPAN documentation
         http://annocpan.org/dist/Template-Flute
