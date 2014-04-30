@@ -12,7 +12,6 @@ use Template::Flute::Increment;
 use Template::Flute::Container;
 use Template::Flute::List;
 use Template::Flute::Form;
-use Scalar::Util qw/blessed weaken/;
 use Template::Flute::UriAdjust;
 
 use Scalar::Util qw/blessed/;
@@ -503,10 +502,7 @@ sub _elt_handler {
 		if (exists $sob->{filter}) {
 			$self->{lists}->{$name}->set_filter($sob->{filter});
 		}
-        # weaken($self->{lists}->{$name});
-        # use Data::Dumper;
-        # find_cycle($self);
-        weaken($self->{lists}->{$name});
+		
 		return $self;
 	}
 
