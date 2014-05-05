@@ -336,6 +336,7 @@ sub _bootstrap {
 sub _bootstrap_specification {
 	my ($self, $source, $specification, $store) = @_;
 	my ($parser_name, $parser_spec, $spec_file);
+    my $spec;
 	
 	if ($parser_name = $self->{specification_parser}) {
 		# load parser class
