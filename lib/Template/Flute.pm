@@ -1265,7 +1265,7 @@ sub DESTROY {
     my $self = shift;
     # manually delete the xml to break the circula references
     weaken($self->{specification}->{xml});
-    weaken($self->{template}->{xml});
+    # weaken($self->{template}->{xml});
 }
 
 
