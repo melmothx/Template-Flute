@@ -26,6 +26,11 @@ for my $iter (1..10) {
 }
 
 for my $iter (1..10) {
+    $mu->record("Template with simple list $iter");
+    process_list();
+}
+
+for my $iter (1..10) {
     $mu->record("Template Iteration with lists $iter");
     process_template();
 }
@@ -67,6 +72,38 @@ sub process_minimal {
     my $output = $flute->process;
     return $flute;
 }
+
+sub process_list {
+    my $spec = q{<specification>
+<value name="test"/>
+<list name="accounts" iterator="accounts">
+<param name="username" class="link"/>
+</list>
+</specification>
+};
+
+    my $html = q{<div class="test">TEST</div>
+<li class="accounts">
+<span class="link"></span>
+</li>
+};
+    my @accounts;
+    for (1..20) {
+        push @accounts, { username => 'user-' . rand(100) };
+    }
+    my $flute = Template::Flute->new(template => $html,
+                                     specification => $spec,
+                                     values => {
+                                                test => rand(100),
+                                                accounts => \@accounts,
+                                               },
+                                     
+                                    );
+    my $output = $flute->process;
+    return $flute;
+}
+
+
 
 sub process_template {
 
