@@ -61,10 +61,13 @@ sub parse_twig {
 sub process_minimal {
     my $spec = q{<specification>
 <value name="test"/>
+<container name="account_errors" value="warnings" class="infobox">
+<value name="warnings"/>
+</container>
 </specification>
 };
 
-    my $html = q{<div class="test">TEST</div>};
+    my $html = q{<div class="test">TEST</div><div class="infobox"><div class"warnings"></div></div>};
     my $flute = Template::Flute->new(template => $html,
                                      specification => $spec,
                                      values => {test => rand(100)},
