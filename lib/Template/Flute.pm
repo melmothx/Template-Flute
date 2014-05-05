@@ -281,7 +281,7 @@ sub new {
 	if (exists $self->{specification}
 		&& ! ref($self->{specification})) {
 		# specification passed as string
-		$self->_bootstrap_specification('string', delete $self->{specification});
+		$self->_bootstrap_specification('string', delete $self->{specification}, 1);
 	}
 
 	if (exists $self->{template}
@@ -327,14 +327,14 @@ sub _bootstrap {
 			}
 		}
 
-		$self->_bootstrap_specification(file => $self->{specification_file});
+		$self->_bootstrap_specification(file => $self->{specification_file}, 1);
 	}
 
 	$self->_bootstrap_template(file => $self->{template_file}, $snippet);
 }
 
 sub _bootstrap_specification {
-	my ($self, $source, $specification) = @_;
+	my ($self, $source, $specification, $store) = @_;
 	my ($parser_name, $parser_spec, $spec_file);
 	
 	if ($parser_name = $self->{specification_parser}) {
@@ -364,13 +364,13 @@ sub _bootstrap_specification {
 	}
 	
 	if ($source eq 'file') {
-		unless ($self->{specification} = $parser_spec->parse_file($specification)) {
+		unless ($spec = $parser_spec->parse_file($specification)) {
 			die "$0: error parsing $specification: " . $parser_spec->error() . "\n";
 		}
 	}
 	else {
 		# text
-		unless ($self->{specification} = $parser_spec->parse($specification)) {
+		unless ($spec = $parser_spec->parse($specification)) {
 			die "$0: error parsing $spec_file: " . $parser_spec->error() . "\n";
 		}
 	}
@@ -379,10 +379,13 @@ sub _bootstrap_specification {
 	my ($name, $iter);
 	
 	while (($name, $iter) = each %{$self->{iterators}}) {
-		$self->{specification}->set_iterator($name, $iter);
+		$spec->set_iterator($name, $iter);
 	}
-	
-	return $self->{specification};
+	if ($store) {
+        $self->{specification} = $spec;
+    }
+    undef $parser_spec;
+	return $spec;
 }
 
 sub _bootstrap_template {
